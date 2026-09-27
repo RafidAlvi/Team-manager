@@ -15,7 +15,6 @@
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-storage-compat.js"></script>
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3551,15 +3550,6 @@ html body.dark-mode {
 }
 </style>
 
-<style id="member-late-fee-hide-action-final">
-/* Member Portal: show late-fee logs, but never show the Action column. */
-body.member-portal #lateFeeModal #allLateFeeLogsList th:last-child,
-body.member-portal #lateFeeModal #allLateFeeLogsList td:last-child,
-#lateFeeModal.member-portal #allLateFeeLogsList th:last-child,
-#lateFeeModal.member-portal #allLateFeeLogsList td:last-child {
-  display: none !important;
-}
-</style>
 </head>
 <body>
 
@@ -4323,9 +4313,9 @@ Jahid Hasan - 100"
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label>Day Status</label>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <button type="button" id="kpiOffDayBtn" class="btn-secondary" style="flex:1; min-width:0; height:36px; padding:6px 10px; font-size:12px;" onclick="toggleKpiOffDay()">🏖️ Off Day</button>
-              <button class="btn-success" type="button" style="flex:1; min-width:0; height:36px; padding:6px 10px; font-size:12px; white-space:nowrap;" onclick="addKpiRow()">+ Add Entry</button>
+            <div style="display:flex; gap:6px;">
+              <button type="button" id="kpiOffDayBtn" class="btn-secondary" style="width:100%; height:34px;" onclick="toggleKpiOffDay()">🏖️ Off Day</button>
+              <button class="btn-success" type="button" style="width:100%; height:34px;" onclick="addKpiRow()">+ Add Entry</button>
             </div>
           </div>
           <div class="form-group" style="margin-bottom:0;">
@@ -4621,7 +4611,6 @@ Jahid Hasan - 100"
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    const imageStorage = (firebase.storage ? firebase.storage() : null);
 
     // --- REAL-TIME TAB SYNC CHANNEL ---
     const breakChannel = new BroadcastChannel('break_timer_channel');
@@ -4669,7 +4658,6 @@ Jahid Hasan - 100"
     let kpiRecords = [];
     let kpiEditingMemberName = null;
     let kpiOffDaySelected = false;
-    let kpiPendingImage = "";
     let repaymentRecords = [];
     let repaymentEditingMemberName = null;
 
@@ -4895,50 +4883,8 @@ Jahid Hasan - 100"
       }
     }
 
-    function memberNameFromRosterValue(value) {
-      const raw = String(value ?? '').trim();
-      if (!raw) return '';
-      // If Firebase ever contains an email in memberList, resolve it back to
-      // the configured member name so login/database keys remain unchanged.
-      const email = raw.match(/^[^\s@]+@[^\s@]+$/);
-      if (email) {
-        const target = raw.toLowerCase();
-        const found = Object.entries(configuredMemberEmails || {}).find(([, v]) => String(v).toLowerCase() === target);
-        return found ? found[0] : raw;
-      }
-      return raw;
-    }
-
-    function memberDropdownLabel(value) {
-      const raw = String(value ?? '').trim();
-      if (!raw) return '';
-      // Never show the company email domain in member dropdowns.
-      // Example: kaniz.fatama@palmpay-inc.com -> kaniz.fatama
-      if (/^[^\s@]+@palmpay-inc\.com$/i.test(raw)) return raw.split('@')[0];
-      return raw;
-    }
-
-    function escapeSelectText(value) {
-      return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-    }
-
     function populateMemberDropdowns() {
-      const rawList = globalState.memberList || defaultMemberList;
-      const sourceList = [...new Set((Array.isArray(rawList) ? rawList : [])
-        .map(v => String(v ?? '').trim()).filter(Boolean))];
-      const memberOptions = sourceList.map(raw => ({
-        value: memberNameFromRosterValue(raw),
-        label: memberDropdownLabel(raw)
-      })).filter(x => x.value);
-      const seenValues = new Set();
-      const list = memberOptions.filter(x => {
-        if(seenValues.has(x.value)) return false;
-        seenValues.add(x.value);
-        return true;
-      });
-      const values = list.map(x => x.value);
-      const optionHtml = x => `<option value="${escapeSelectText(x.value)}">${escapeSelectText(x.label)}</option>`;
-
+      const list = globalState.memberList || defaultMemberList;
       const loginSelect = document.getElementById('loginMemberSelect');
       // IMPORTANT: rebuilding the member list must never change the currently
       // selected Member. Otherwise a Firebase refresh can switch Munna to the
@@ -4946,23 +4892,28 @@ Jahid Hasan - 100"
       // whenever that member still exists.
       const currentLoginMember = loginSelect ? String(loginSelect.value || '') : '';
       if (loginSelect) {
-        loginSelect.innerHTML = list.map(optionHtml).join('');
-        if (currentLoginMember && values.includes(currentLoginMember)) {
+        loginSelect.innerHTML = list.map(m => `<option value="${m}">${m}</option>`).join('');
+        if (currentLoginMember && list.includes(currentLoginMember)) {
           loginSelect.value = currentLoginMember;
-        } else if (currentUser?.role === 'member' && currentUser.name && values.includes(currentUser.name)) {
+        } else if (currentUser?.role === 'member' && currentUser.name && list.includes(currentUser.name)) {
           loginSelect.value = currentUser.name;
         }
       }
 
       const resetSelect = document.getElementById('adminResetMemberSelect');
-      if (resetSelect) resetSelect.innerHTML = list.map(optionHtml).join('');
+      if (resetSelect) {
+        resetSelect.innerHTML = list.map(m => `<option value="${m}">${m}</option>`).join('');
+      }
 
       const modalSelect = document.getElementById('lateFeeMemberSelect');
-      if (modalSelect) modalSelect.innerHTML = list.map(optionHtml).join('');
+      if (modalSelect) {
+        modalSelect.innerHTML = list.map(m => `<option value="${m}">${m}</option>`).join('');
+      }
 
       const filterSelect = document.getElementById('lateFeeFilterMember');
       if (filterSelect) {
-        filterSelect.innerHTML = `<option value="ALL">All Members</option>` + list.map(optionHtml).join('');
+        filterSelect.innerHTML = `<option value="ALL">All Members</option>` + 
+          list.map(m => `<option value="${m}">${m}</option>`).join('');
       }
     }
 
@@ -6726,45 +6677,7 @@ function memberLogin() {
       }).sort((a,b)=>b.totalKpi-a.totalKpi||a.name.localeCompare(b.name));
     }
 
-    let adminLeaderboardCurrentPage = 1;
-    const ADMIN_LEADERBOARD_PAGE_SIZE = 10;
-
-    function renderAdminLeaderboardPagination(totalMembers) {
-      const section = document.getElementById('adminLeaderboardSection');
-      if (!section) return;
-      let pager = document.getElementById('adminLeaderboardPagination');
-      if (!pager) {
-        pager = document.createElement('div');
-        pager.id = 'adminLeaderboardPagination';
-        pager.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;margin:4px 0 12px;';
-        const table = document.getElementById('adminLeaderboardTable');
-        if (table && table.parentElement) table.parentElement.insertAdjacentElement('afterend', pager);
-        else section.appendChild(pager);
-      }
-      const totalPages = Math.max(1, Math.ceil(totalMembers / ADMIN_LEADERBOARD_PAGE_SIZE));
-      if (adminLeaderboardCurrentPage > totalPages) adminLeaderboardCurrentPage = totalPages;
-      pager.innerHTML = `
-        <button type="button" class="btn-secondary" style="min-width:64px;height:29px;padding:4px 8px;font-size:11px;line-height:1;white-space:nowrap;"
-          ${adminLeaderboardCurrentPage <= 1 ? 'disabled' : ''}
-          onclick="changeAdminLeaderboardPage(-1)">← Previous</button>
-        <span style="font-size:11px;font-weight:700;min-width:82px;text-align:center;line-height:29px;">Page ${adminLeaderboardCurrentPage} of ${totalPages}</span>
-        <button type="button" class="btn-secondary" style="min-width:64px;height:29px;padding:4px 8px;font-size:11px;line-height:1;white-space:nowrap;"
-          ${adminLeaderboardCurrentPage >= totalPages ? 'disabled' : ''}
-          onclick="changeAdminLeaderboardPage(1)">Next →</button>`;
-    }
-
-    window.changeAdminLeaderboardPage = function(direction) {
-      const members = buildDateWiseLeaderboardData('adminLeaderboard') || [];
-      const totalPages = Math.max(1, Math.ceil(members.length / ADMIN_LEADERBOARD_PAGE_SIZE));
-      const nextPage = adminLeaderboardCurrentPage + Number(direction || 0);
-      if (nextPage < 1 || nextPage > totalPages) return;
-      adminLeaderboardCurrentPage = nextPage;
-      renderDateWiseLeaderboardTable('adminLeaderboardTableBody', 'adminLeaderboard', true);
-      const section = document.getElementById('adminLeaderboardSection');
-      if (section) section.scrollIntoView({behavior:'smooth', block:'start'});
-    };
-
-    function renderDateWiseLeaderboardTable(tbodyId, prefix, paginateAdmin = true) {
+    function renderDateWiseLeaderboardTable(tbodyId, prefix) {
       const tbody=document.getElementById(tbodyId); if(!tbody)return;
       const showDetails = true; // Member Panel uses the same Details column and date-wise details as Admin.
       const members=buildDateWiseLeaderboardData(prefix); tbody.innerHTML='';
@@ -6808,28 +6721,6 @@ function memberLogin() {
             </div>
           </td></tr>` : `</tr>`}`;
       });
-
-      if (tbodyId === 'adminLeaderboardTableBody' && paginateAdmin) {
-        const sourceRows = Array.from(tbody.children);
-        const memberRows = [];
-        for (let i = 0; i < sourceRows.length; i++) {
-          const mainRow = sourceRows[i];
-          if (mainRow.classList.contains('leaderboard-details-row')) continue;
-          const detailRow = sourceRows[i + 1] && sourceRows[i + 1].classList.contains('leaderboard-details-row') ? sourceRows[i + 1] : null;
-          memberRows.push({ mainRow, detailRow });
-        }
-        const totalMembers = memberRows.length;
-        const totalPages = Math.max(1, Math.ceil(totalMembers / ADMIN_LEADERBOARD_PAGE_SIZE));
-        if (adminLeaderboardCurrentPage > totalPages) adminLeaderboardCurrentPage = totalPages;
-        const startIndex = (adminLeaderboardCurrentPage - 1) * ADMIN_LEADERBOARD_PAGE_SIZE;
-        const visibleRows = memberRows.slice(startIndex, startIndex + ADMIN_LEADERBOARD_PAGE_SIZE);
-        tbody.innerHTML = '';
-        visibleRows.forEach(pair => {
-          tbody.appendChild(pair.mainRow);
-          if (pair.detailRow) tbody.appendChild(pair.detailRow);
-        });
-        renderAdminLeaderboardPagination(totalMembers);
-      }
     }
     function openLeaderboardDetailsPage(id, button) {
       const row = document.getElementById(id) || (button?.closest('tr')?.nextElementSibling);
@@ -6875,7 +6766,7 @@ function memberLogin() {
       openLeaderboardDetailsPage(id, button);
     }
 
-    function renderAdminLeaderboardTable(resetPage = true){ if(resetPage) adminLeaderboardCurrentPage = 1; renderDateWiseLeaderboardTable('adminLeaderboardTableBody','adminLeaderboard', true); }
+    function renderAdminLeaderboardTable(){ renderDateWiseLeaderboardTable('adminLeaderboardTableBody','adminLeaderboard'); }
     function renderMemberRankingTable(){
   renderDateWiseLeaderboardTable('memberRankingTableBody','memberLeaderboard');
   setTimeout(() => {
@@ -7269,99 +7160,29 @@ function memberLogin() {
       return 'application/octet-stream';
     }
 
-    async function downloadBlobFile(blob, fileName) {
-      try {
-        if (!blob) throw new Error('Empty download file.');
-        const safeName = String(fileName || 'download').replace(/[\\/:*?"<>|]/g, '_');
-        const mime = getDownloadMimeType(safeName);
-
-        // APK/WebView bridges use different method names and argument orders.
-        // Try the common forms so the same HTML works in different APK wrappers.
-        const android = window.Android || window.android || window.AndroidBridge || window.AndroidInterface || null;
-        if (android) {
-          const reader = new FileReader();
-          const base64 = await new Promise((resolve, reject) => {
-            reader.onloadend = () => {
-              const value = String(reader.result || '');
-              const comma = value.indexOf(',');
-              if (comma < 0) return reject(new Error('Could not encode download file.'));
-              resolve(value.slice(comma + 1));
-            };
-            reader.onerror = () => reject(reader.error || new Error('File read failed.'));
-            reader.readAsDataURL(blob);
-          });
-
-          const calls = [
-            ['downloadBase64', [safeName, mime, base64]],
-            ['downloadBase64', [base64, safeName, mime]],
-            ['saveFile', [safeName, mime, base64]],
-            ['saveFile', [base64, safeName, mime]],
-            ['downloadFile', [safeName, mime, base64]],
-            ['downloadFile', [base64, safeName, mime]],
-            ['saveBase64File', [base64, safeName, mime]],
-            ['saveBase64File', [safeName, mime, base64]]
-          ];
-          for (const [method, args] of calls) {
-            if (typeof android[method] !== 'function') continue;
-            try {
-              const result = android[method](...args);
-              if (result && typeof result.then === 'function') await result;
-              return true;
-            } catch (bridgeError) {
-              console.warn('APK download bridge method failed:', method, bridgeError);
-            }
-          }
-        }
-
-        // Standard browser/WebView fallback.
-        if (navigator.msSaveOrOpenBlob) {
-          navigator.msSaveOrOpenBlob(blob, safeName);
-          return true;
-        }
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = safeName;
-        a.target = '_blank';
-        a.rel = 'noopener';
-        a.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;';
-        document.body.appendChild(a);
-        try { a.click(); } catch (clickError) { console.warn('Anchor download failed:', clickError); }
-
-        // Some Android WebViews ignore the download attribute. Opening the blob
-        // in a new tab gives the WebView/browser PDF viewer a usable fallback.
-        if (String(safeName).toLowerCase().endsWith('.pdf')) {
-          setTimeout(() => {
-            try {
-              const opened = window.open(url, '_blank');
-              if (!opened) console.warn('PDF viewer fallback was blocked.');
-            } catch (openError) { console.warn('PDF viewer fallback failed:', openError); }
-          }, 250);
-        }
-
-        setTimeout(() => { try { a.remove(); URL.revokeObjectURL(url); } catch (_) {} }, 15000);
-
-        // Android's Web Share API can save/share the generated file when the
-        // WebView does not expose a download bridge. It is only used as a final
-        // fallback and does not alter the page UI.
-        if (navigator.share && typeof File !== 'undefined') {
+    function downloadBlobFile(blob, fileName) {
+      const mime = getDownloadMimeType(fileName);
+      if (window.Android && typeof window.Android.downloadBase64 === 'function') {
+        const reader = new FileReader();
+        reader.onloadend = function() {
+          const base64 = String(reader.result || '').split(',')[1] || '';
           try {
-            const shareFile = new File([blob], safeName, {type: mime});
-            if (!navigator.canShare || navigator.canShare({files:[shareFile]})) {
-              await navigator.share({files:[shareFile], title:safeName});
-              return true;
-            }
-          } catch (shareError) {
-            if (shareError?.name !== 'AbortError') console.warn('File share fallback failed:', shareError);
+            window.Android.downloadBase64(fileName, mime, base64);
+          } catch (e) {
+            console.error('Android download bridge error:', e);
+            alert('Download failed in APK. Please allow file/storage permission and try again.');
           }
-        }
+        };
+        reader.readAsDataURL(blob);
         return true;
-      } catch (e) {
-        console.error('Download error:', e);
-        alert('Download failed. Please allow file/storage permission in the APK and try again.');
-        return false;
       }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fileName; a.rel = 'noopener';
+      a.style.display = 'none';
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500);
+      return true;
     }
 
     // ===== EXPORT FORMAT CHOOSER: PDF OR XLSX =====
@@ -7548,13 +7369,12 @@ function memberLogin() {
       db.ref(`memberKpis/${sanitizedKey}`).set(kpiRecords);
     }
 
-    async function addKpiRow() {
+    function addKpiRow() {
       const dateVal = document.getElementById('kpiInputDate').value;
       let dayVal = document.getElementById('kpiInputDay').value;
       const kpiScore = ceilKpiAmount(document.getElementById('kpiInputScore').value);
       const allowance = parseFloat(document.getElementById('kpiInputAllowance').value) || 0;
       const salary = parseFloat(document.getElementById('kpiInputSalary').value) || 0;
-      const memberName = (isZahidHasan() && kpiEditingMemberName) ? kpiEditingMemberName : (currentUser?.name || 'Member');
 
       // If all three numeric values are zero, this entry is automatically an Off Day.
       if (kpiOffDaySelected || (kpiScore === 0 && allowance === 0 && salary === 0)) {
@@ -7569,15 +7389,14 @@ function memberLogin() {
       const parts = dateVal.split('-');
       const formattedDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
 
-      const newKpiRecord = {
+      kpiRecords.push({
         id: Date.now(),
         date: formattedDate,
         day: dayVal,
         kpi: kpiScore,
         allowance: allowance,
         salary: salary
-      };
-      kpiRecords.push(newKpiRecord);
+      });
 
       // Save the current day, then automatically prepare the next day.
       saveKpiToFirebase();
@@ -8390,15 +8209,9 @@ const lateFeeFilterCard = document.querySelector('#lateFeeModal .late-fee-filter
           if (filterHeading) filterHeading.setAttribute('aria-expanded', 'false');
         }
       }
-      // Member Portal: show All Late Fee Logs & Close Date Status, but hide only the Action column.
-      if (lateFeeLogsHeading) lateFeeLogsHeading.style.display = '';
-      if (lateFeeLogsTable) lateFeeLogsTable.style.display = '';
+      if (lateFeeLogsHeading) lateFeeLogsHeading.style.display = isAdmin ? '' : 'none';
+      if (lateFeeLogsTable) lateFeeLogsTable.style.display = isAdmin ? '' : 'none';
       if (lateFeeLogsNote) lateFeeLogsNote.style.display = 'none';
-      if (lateFeeLogsTable) {
-        lateFeeLogsTable.querySelectorAll('th:last-child, td:last-child').forEach(cell => {
-          cell.style.display = isAdmin ? '' : 'none';
-        });
-      }
 
       if (lateFees.length === 0) {
         logsList.innerHTML = '<tr><td colspan="8" style="color:var(--text-muted);">No fee logs recorded for the selected range</td></tr>';
@@ -9245,7 +9058,7 @@ const lateFeeFilterCard = document.querySelector('#lateFeeModal .late-fee-filter
     }
   };
 
-  window.downloadMonthlyMemberInfoPDF = async function(){
+  window.downloadMonthlyMemberInfoPDF = function(){
     try {
       const { jsPDF } = window.jspdf || {};
       if(!jsPDF) { alert('PDF library is not available. Please check your internet connection and try again.'); return; }
@@ -9276,7 +9089,7 @@ const lateFeeFilterCard = document.querySelector('#lateFeeModal .late-fee-filter
       });
       const safeMonth=(month||'month').replace(/[^0-9-]/g,'_');
       const safeMember=(member==='All Members'?'all-members':member).replace(/[^a-z0-9_-]/gi,'_');
-      await downloadBlobFile(doc.output('blob'), `monthly-member-information-${safeMonth}-${safeMember}.pdf`);
+      doc.save(`monthly-member-information-${safeMonth}-${safeMember}.pdf`);
     } catch(e) { console.error(e); alert('PDF download failed: '+(e.message||e)); }
   };
 
@@ -9715,45 +9528,6 @@ function toggleMemberInfoUpdatePanel(){
 
 <script>
 (function(){
-  // Dedicated Admin Member Leaderboard uses the exact same 10-member pagination
-  // behavior as the Team Member Leaderboard page.
-  let adminLeaderboardPageCurrentPage = 1;
-  const ADMIN_LEADERBOARD_PAGE_SIZE = 10;
-
-  function renderAdminLeaderboardPagePagination(totalMembers){
-    const content=document.getElementById('adminLeaderboardPageContent');
-    if(!content) return;
-    let pager=document.getElementById('adminLeaderboardPagePagination');
-    if(!pager){
-      pager=document.createElement('div');
-      pager.id='adminLeaderboardPagePagination';
-      pager.style.cssText='display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;margin:6px 0 10px;';
-      content.appendChild(pager);
-    }
-    const totalPages=Math.max(1,Math.ceil(totalMembers/ADMIN_LEADERBOARD_PAGE_SIZE));
-    if(adminLeaderboardPageCurrentPage>totalPages) adminLeaderboardPageCurrentPage=totalPages;
-    pager.innerHTML=`
-      <button type="button" class="btn-secondary" style="min-width:64px;height:29px;padding:4px 8px;font-size:11px;line-height:1;white-space:nowrap;"
-        ${adminLeaderboardPageCurrentPage<=1?'disabled':''}
-        onclick="changeAdminLeaderboardPage(\-1)">← Previous</button>
-      <span style="font-size:11px;font-weight:700;min-width:82px;text-align:center;line-height:29px;">Page ${adminLeaderboardPageCurrentPage} of ${totalPages}</span>
-      <button type="button" class="btn-secondary" style="min-width:64px;height:29px;padding:4px 8px;font-size:11px;line-height:1;white-space:nowrap;"
-        ${adminLeaderboardPageCurrentPage>=totalPages?'disabled':''}
-        onclick="changeAdminLeaderboardPageView(1)">Next →</button>`;
-  }
-
-  window.changeAdminLeaderboardPageView = function(direction){
-    const memberFilter=document.getElementById('adminLeaderboardPageMemberFilter')?.value || 'ALL';
-    const members=(globalState.memberList || defaultMemberList || []).filter(name=>memberFilter==='ALL' || name===memberFilter);
-    const totalPages=Math.max(1,Math.ceil(members.length/ADMIN_LEADERBOARD_PAGE_SIZE));
-    const nextPage=adminLeaderboardPageCurrentPage+Number(direction||0);
-    if(nextPage<1 || nextPage>totalPages) return;
-    adminLeaderboardPageCurrentPage=nextPage;
-    renderAdminLeaderboardPageTable();
-    const page=document.getElementById('adminLeaderboardPage');
-    if(page) page.scrollTop=0;
-  };
-
   window.toggleAdminLeaderboardPageFilter = function(){
     document.getElementById('adminLeaderboardPageFilterPanel')?.classList.toggle('hidden');
   };
@@ -9772,7 +9546,6 @@ function toggleMemberInfoUpdatePanel(){
     const s=document.getElementById('adminLeaderboardPageStartDate');
     const e=document.getElementById('adminLeaderboardPageEndDate');
     if(m) m.value='ALL'; if(s) s.value=''; if(e) e.value='';
-    adminLeaderboardPageCurrentPage=1;
     renderAdminLeaderboardPageTable();
   };
 
@@ -9791,32 +9564,7 @@ function toggleMemberInfoUpdatePanel(){
       const content=document.getElementById('adminLeaderboardPageContent');
       if(!content) return;
       content.innerHTML=`<div class="table-container leaderboard-no-scroll" style="max-height:none;height:auto;overflow-x:auto;overflow-y:visible;margin-bottom:14px;-webkit-overflow-scrolling:touch;"><table id="adminLeaderboardPageTable" style="min-width:980px;width:max-content;"><thead><tr><th>Rank</th><th>Member Name</th><th>Total KPI</th><th>Total Allowance</th><th>Off Day Count</th><th>Off Day Dates</th><th>Deduction Amount</th><th>Net Repayment</th><th>Salary</th><th>Total (KPI + Allowance + Salary)</th><th>Details</th></tr></thead><tbody id="adminLeaderboardPageTableBody"><tr><td colspan="11" style="color:var(--text-muted);text-align:center;">Loading member rankings...</td></tr></tbody></table></div>`;
-
-      // Build the exact same rows/data as the Member Leaderboard, then show only 10 members.
-      if(typeof renderDateWiseLeaderboardTable==='function'){
-        renderDateWiseLeaderboardTable('adminLeaderboardPageTableBody','adminLeaderboard',false);
-        const sourceBody=document.getElementById('adminLeaderboardPageTableBody');
-        const sourceRows=sourceBody ? Array.from(sourceBody.children) : [];
-        const memberRows=[];
-        for(let i=0;i<sourceRows.length;i++){
-          const mainRow=sourceRows[i];
-          if(mainRow.classList.contains('leaderboard-details-row')) continue;
-          const detailRow=sourceRows[i+1] && sourceRows[i+1].classList.contains('leaderboard-details-row') ? sourceRows[i+1] : null;
-          memberRows.push({mainRow,detailRow});
-        }
-
-        const totalMembers=memberRows.length;
-        const totalPages=Math.max(1,Math.ceil(totalMembers/ADMIN_LEADERBOARD_PAGE_SIZE));
-        if(adminLeaderboardPageCurrentPage>totalPages) adminLeaderboardPageCurrentPage=totalPages;
-        const startIndex=(adminLeaderboardPageCurrentPage-1)*ADMIN_LEADERBOARD_PAGE_SIZE;
-        const visibleRows=memberRows.slice(startIndex,startIndex+ADMIN_LEADERBOARD_PAGE_SIZE);
-        sourceBody.innerHTML='';
-        visibleRows.forEach(pair=>{
-          sourceBody.appendChild(pair.mainRow.cloneNode(true));
-          if(pair.detailRow) sourceBody.appendChild(pair.detailRow.cloneNode(true));
-        });
-        renderAdminLeaderboardPagePagination(totalMembers);
-      }
+      if(typeof renderDateWiseLeaderboardTable==='function') renderDateWiseLeaderboardTable('adminLeaderboardPageTableBody','adminLeaderboard');
       setTimeout(()=>{ if(typeof applyLeaderboardRankColors==='function') applyLeaderboardRankColors('adminLeaderboardPageTable'); },0);
     } finally {
       if(adminM) adminM.value=old[0]; if(adminS) adminS.value=old[1]; if(adminE) adminE.value=old[2];
@@ -9827,7 +9575,6 @@ function toggleMemberInfoUpdatePanel(){
     const page=document.getElementById('adminLeaderboardPage');
     if(!page) return;
     page.classList.remove('hidden'); page.style.display='block'; page.scrollTop=0;
-    adminLeaderboardPageCurrentPage=1;
     document.body.classList.add('leaderboard-page-open');
     if(typeof populateAdminLeaderboardPageFilter==='function') populateAdminLeaderboardPageFilter();
     renderAdminLeaderboardPageTable();
@@ -9856,17 +9603,17 @@ function toggleMemberInfoUpdatePanel(){
       <div class="leaderboard-filter-grid">
         <div class="form-group" style="margin-bottom:0;">
           <label>Member Name</label>
-          <select id="memberLeaderboardPageMemberFilter" onchange="memberLeaderboardPageCurrentPage=1; renderMemberLeaderboardPageTable()">
+          <select id="memberLeaderboardPageMemberFilter" onchange="renderMemberLeaderboardPageTable()">
             <option value="ALL">All Members</option>
           </select>
         </div>
         <div class="form-group" style="margin-bottom:0;">
           <label>Start Date</label>
-          <input type="date" id="memberLeaderboardPageStartDate" onchange="memberLeaderboardPageCurrentPage=1; renderMemberLeaderboardPageTable()">
+          <input type="date" id="memberLeaderboardPageStartDate" onchange="renderMemberLeaderboardPageTable()">
         </div>
         <div class="form-group" style="margin-bottom:0;">
           <label>End Date</label>
-          <input type="date" id="memberLeaderboardPageEndDate" onchange="memberLeaderboardPageCurrentPage=1; renderMemberLeaderboardPageTable()">
+          <input type="date" id="memberLeaderboardPageEndDate" onchange="renderMemberLeaderboardPageTable()">
         </div>
       </div>
       <div class="leaderboard-filter-actions">
@@ -9894,47 +9641,6 @@ function populateMemberLeaderboardPageFilter() {
   if (current === 'ALL' || members.includes(current)) select.value = current;
 }
 
-let memberLeaderboardPageCurrentPage = 1;
-const MEMBER_LEADERBOARD_PAGE_SIZE = 10;
-
-function renderMemberLeaderboardPagePagination(totalMembers) {
-  const content = document.getElementById('memberLeaderboardPageContent');
-  if (!content) return;
-  let pager = document.getElementById('memberLeaderboardPagePagination');
-  if (!pager) {
-    pager = document.createElement('div');
-    pager.id = 'memberLeaderboardPagePagination';
-    pager.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;margin:6px 0 10px;';
-    content.appendChild(pager);
-  }
-  const totalPages = Math.max(1, Math.ceil(totalMembers / MEMBER_LEADERBOARD_PAGE_SIZE));
-  if (memberLeaderboardPageCurrentPage > totalPages) memberLeaderboardPageCurrentPage = totalPages;
-  pager.innerHTML = `
-    <button type="button" class="btn-secondary" id="memberLeaderboardPrevBtn"
-      style="min-width:64px;height:29px;padding:4px 8px;font-size:11px;line-height:1;white-space:nowrap;"
-      ${memberLeaderboardPageCurrentPage <= 1 ? 'disabled' : ''}
-      onclick="changeMemberLeaderboardPage(-1)">← Previous</button>
-    <span style="font-size:11px;font-weight:700;min-width:82px;text-align:center;line-height:29px;">Page ${memberLeaderboardPageCurrentPage} of ${totalPages}</span>
-    <button type="button" class="btn-secondary" id="memberLeaderboardNextBtn"
-      style="min-width:64px;height:29px;padding:4px 8px;font-size:11px;line-height:1;white-space:nowrap;"
-      ${memberLeaderboardPageCurrentPage >= totalPages ? 'disabled' : ''}
-      onclick="changeMemberLeaderboardPage(1)">Next →</button>`;
-}
-
-window.changeMemberLeaderboardPage = function(direction) {
-  const memberFilter = document.getElementById('memberLeaderboardPageMemberFilter')?.value || 'ALL';
-  const start = document.getElementById('memberLeaderboardPageStartDate')?.value || '';
-  const end = document.getElementById('memberLeaderboardPageEndDate')?.value || '';
-  const members = (globalState.memberList || defaultMemberList || []).filter(name => memberFilter === 'ALL' || name === memberFilter);
-  const totalPages = Math.max(1, Math.ceil(members.length / MEMBER_LEADERBOARD_PAGE_SIZE));
-  const nextPage = memberLeaderboardPageCurrentPage + Number(direction || 0);
-  if (nextPage < 1 || nextPage > totalPages) return;
-  memberLeaderboardPageCurrentPage = nextPage;
-  renderMemberLeaderboardPageTable();
-  const page = document.getElementById('memberLeaderboardPage');
-  if (page) page.scrollTop = 0;
-};
-
 function renderMemberLeaderboardPageTable() {
   const memberFilter = document.getElementById('memberLeaderboardPageMemberFilter')?.value || 'ALL';
   const start = document.getElementById('memberLeaderboardPageStartDate')?.value || '';
@@ -9959,27 +9665,8 @@ function renderMemberLeaderboardPageTable() {
   try {
     // Build exactly the same rows as the Admin leaderboard, then copy them.
     if (typeof renderDateWiseLeaderboardTable === 'function') {
-      renderDateWiseLeaderboardTable('adminLeaderboardTableBody', 'adminLeaderboard', false);
-      const sourceRows = originalAdminTbody ? Array.from(originalAdminTbody.children) : [];
-      const memberRows = [];
-      for (let i = 0; i < sourceRows.length; i++) {
-        const mainRow = sourceRows[i];
-        if (mainRow.classList.contains('leaderboard-details-row')) continue;
-        const detailRow = sourceRows[i + 1] && sourceRows[i + 1].classList.contains('leaderboard-details-row') ? sourceRows[i + 1] : null;
-        memberRows.push({ mainRow, detailRow });
-      }
-
-      const totalMembers = memberRows.length;
-      const totalPages = Math.max(1, Math.ceil(totalMembers / MEMBER_LEADERBOARD_PAGE_SIZE));
-      if (memberLeaderboardPageCurrentPage > totalPages) memberLeaderboardPageCurrentPage = totalPages;
-      const startIndex = (memberLeaderboardPageCurrentPage - 1) * MEMBER_LEADERBOARD_PAGE_SIZE;
-      const visibleRows = memberRows.slice(startIndex, startIndex + MEMBER_LEADERBOARD_PAGE_SIZE);
-      tbody.innerHTML = '';
-      visibleRows.forEach(pair => {
-        tbody.appendChild(pair.mainRow.cloneNode(true));
-        if (pair.detailRow) tbody.appendChild(pair.detailRow.cloneNode(true));
-      });
-      renderMemberLeaderboardPagePagination(totalMembers);
+      renderDateWiseLeaderboardTable('adminLeaderboardTableBody', 'adminLeaderboard');
+      tbody.innerHTML = originalAdminTbody ? originalAdminTbody.innerHTML : '';
     }
   } catch (e) {
     console.error(e);
@@ -9997,7 +9684,6 @@ function clearMemberLeaderboardPageFilter() {
   const a=document.getElementById('memberLeaderboardPageStartDate');
   const b=document.getElementById('memberLeaderboardPageEndDate');
   if(m) m.value='ALL'; if(a) a.value=''; if(b) b.value='';
-  memberLeaderboardPageCurrentPage = 1;
   renderMemberLeaderboardPageTable();
 }
 
@@ -10027,7 +9713,6 @@ function openMemberLeaderboardPage() {
   if (!page || !content) return;
 
   populateMemberLeaderboardPageFilter();
-  memberLeaderboardPageCurrentPage = 1;
 
   // Dedicated page with unique IDs so the Details button always opens
   // the correct detail row on this page.
@@ -10367,11 +10052,11 @@ body:has(#loginScreen:not(.hidden)) #appCardContainer {
       <div style="display:grid;grid-template-columns:1fr;gap:8px;">
         <div class="form-group" style="margin-bottom:0;">
           <label>📷 Daily Call Report — Upload Picture</label>
-          <input type="file" id="dailyCallPictureInput" accept="image/*" capture="environment" onchange="previewDailyReportImage('daily')">
+          <input type="file" id="dailyCallPictureInput" accept="image/*" onchange="previewDailyReportImage('daily')">
         </div>
         <div class="form-group" style="margin-bottom:0;">
           <label>📷 PTP Call Report — Upload Picture</label>
-          <input type="file" id="ptpCallPictureInput" accept="image/*" capture="environment" onchange="previewDailyReportImage('ptp')">
+          <input type="file" id="ptpCallPictureInput" accept="image/*" onchange="previewDailyReportImage('ptp')">
         </div>
       </div>
       <div class="daily-report-preview" id="dailyReportPicturePreview"></div>
@@ -10490,157 +10175,17 @@ body:has(#loginScreen:not(.hidden)) #appCardContainer {
     renderDailyReportTable();
   };
   window.previewDailyReportImage=function(type){
-    try {
-      const input=document.getElementById(type==='daily'?'dailyCallPictureInput':'ptpCallPictureInput');
-      const file=input?.files?.[0];
-      if(!file) return;
-      // A new selection replaces the previous unsaved preview for this picture.
-      dailyReportPreview[type]='';
-      renderPicturePreview();
-      if(!String(file.type||'').toLowerCase().startsWith('image/')) { alert('Please select an image file.'); return; }
-      if(file.size > 15 * 1024 * 1024) { alert('Image is too large. Please choose an image below 15 MB.'); return; }
-      const reader=new FileReader();
-      reader.onload=async()=>{
-        try {
-          const data=await compressDailyReportImage(reader.result);
-          setPreviewImage(type,data);
-        } catch(e) { console.error('Image preview error:',e); alert('Image could not be loaded. Please choose another picture.'); }
-      };
-      reader.onerror=()=>alert('Image could not be read. Please try again.');
-      reader.readAsDataURL(file);
-    } catch(e) { console.error(e); alert('Image upload could not be started.'); }
+    const input=document.getElementById(type==='daily'?'dailyCallPictureInput':'ptpCallPictureInput'); const file=input?.files?.[0]; if(!file)return;
+    const reader=new FileReader(); reader.onload=()=>{ compressDailyReportImage(reader.result).then(data=>{setPreviewImage(type,data);}); }; reader.readAsDataURL(file);
   };
   function compressDailyReportImage(dataUrl){
-    return new Promise((resolve,reject)=>{
-      const img=new Image();
-      img.onload=()=>{
-        try {
-          // Keep each picture comfortably below the Realtime Database write size
-          // and avoid failures with high-resolution Android camera images.
-          const max=1100;
-          const sourceW=img.naturalWidth||img.width||1;
-          const sourceH=img.naturalHeight||img.height||1;
-          const scale=Math.min(1,max/Math.max(sourceW,sourceH));
-          const c=document.createElement('canvas');
-          c.width=Math.max(1,Math.round(sourceW*scale));
-          c.height=Math.max(1,Math.round(sourceH*scale));
-          const ctx=c.getContext('2d',{alpha:false});
-          if(!ctx) return reject(new Error('Canvas is unavailable.'));
-          ctx.fillStyle='#ffffff';
-          ctx.fillRect(0,0,c.width,c.height);
-          ctx.imageSmoothingEnabled=true;
-          ctx.imageSmoothingQuality='high';
-          ctx.drawImage(img,0,0,c.width,c.height);
-
-          let out='';
-          const qualities=[0.72,0.62,0.52,0.42];
-          for(const q of qualities){
-            out=c.toDataURL('image/jpeg',q);
-            if(out.length <= 420000) break;
-          }
-          // Last-resort resize for very large images.
-          if(out.length > 520000){
-            const scale2=0.72;
-            const c2=document.createElement('canvas');
-            c2.width=Math.max(1,Math.round(c.width*scale2));
-            c2.height=Math.max(1,Math.round(c.height*scale2));
-            const ctx2=c2.getContext('2d',{alpha:false});
-            if(!ctx2) return reject(new Error('Canvas is unavailable.'));
-            ctx2.fillStyle='#ffffff'; ctx2.fillRect(0,0,c2.width,c2.height);
-            ctx2.drawImage(c,0,0,c2.width,c2.height);
-            out=c2.toDataURL('image/jpeg',0.48);
-          }
-          if(!out || out.length > 900000) return reject(new Error('Image is still too large after compression.'));
-          resolve(out);
-        } catch(e) { reject(e); }
-      };
-      img.onerror=()=>reject(new Error('Invalid image data.'));
-      img.src=dataUrl;
-    });
+    return new Promise(resolve=>{ const img=new Image(); img.onload=()=>{ const max=2200, scale=Math.min(1,max/Math.max(img.width,img.height)); const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(img.width*scale)); c.height=Math.max(1,Math.round(img.height*scale)); const ctx=c.getContext('2d'); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high'; ctx.drawImage(img,0,0,c.width,c.height); resolve(c.toDataURL('image/jpeg',.95)); }; img.src=dataUrl; });
   }
-  function dataUrlToBlob(dataUrl){
-    const parts=String(dataUrl||'').split(',');
-    if(parts.length<2) throw new Error('Invalid image data.');
-    const mime=(parts[0].match(/data:([^;]+);/)||[])[1] || 'image/jpeg';
-    const binary=atob(parts[1]);
-    const bytes=new Uint8Array(binary.length);
-    for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
-    return new Blob([bytes],{type:mime});
-  }
-  async function uploadImageToStorage(dataUrl,path){
-    if(!dataUrl) return '';
-    if(!imageStorage) throw new Error('Firebase Storage is not available.');
-    const ref=imageStorage.ref(path);
-    const metadata={contentType:(String(dataUrl).match(/^data:([^;]+);/)||[])[1] || 'image/jpeg', cacheControl:'public,max-age=31536000'};
-    await ref.putString(dataUrl,'data_url',metadata);
-    return await ref.getDownloadURL();
-  }
-  function safeImageDataUrl(dataUrl,maxBytes){
-    const s=String(dataUrl||'');
-    return s && s.length<=maxBytes ? s : '';
-  }
-  async function storeImageWithFallback(dataUrl,path){
-    try {
-      return {url:await uploadImageToStorage(dataUrl,path), usedStorage:true};
-    } catch(storageError) {
-      console.warn('Firebase Storage upload failed; using compressed database image fallback.',storageError);
-      const fallback=safeImageDataUrl(dataUrl,950000);
-      if(!fallback) throw storageError;
-      return {url:fallback, usedStorage:false};
-    }
-  }
-  window.previewKpiPicture=async function(){
-    try {
-      const input=document.getElementById('kpiPictureInput');
-      const file=input?.files?.[0];
-      if(!file) return;
-      if(!String(file.type||'').toLowerCase().startsWith('image/')) { alert('Please select an image file.'); if(input) input.value=''; return; }
-      if(file.size>15*1024*1024){ alert('Image is too large. Please choose a picture below 15 MB.'); if(input) input.value=''; return; }
-      const reader=new FileReader();
-      reader.onload=async()=>{
-        try {
-          kpiPendingImage=await compressDailyReportImage(reader.result);
-          const box=document.getElementById('kpiPicturePreview');
-          if(box) box.innerHTML='<span style="color:var(--success);font-weight:700;">✓ Picture ready</span>';
-        } catch(e){ console.error(e); kpiPendingImage=''; alert('KPI picture could not be processed. Please try another picture.'); }
-      };
-      reader.onerror=()=>{ kpiPendingImage=''; alert('KPI picture could not be read. Please try again.'); };
-      reader.readAsDataURL(file);
-    } catch(e){ console.error(e); alert('KPI picture upload could not be started.'); }
-  };
-  function clearKpiPictureInput(){
-    kpiPendingImage='';
-    const input=document.getElementById('kpiPictureInput'); if(input) input.value='';
-    const box=document.getElementById('kpiPicturePreview'); if(box) box.textContent='';
-  }
-
   window.saveDailyReportPictures=async function(){
-    const x=selected();
-    if(!x.member||!x.date){alert('Please select date and member.');return;}
-    if(!dailyReportPreview.daily && !dailyReportPreview.ptp){alert('Please upload at least one picture first.');return;}
-    const updates={updatedAt:Date.now()};
-    try {
-      if(dailyReportPreview.daily){
-        const r=await storeImageWithFallback(dailyReportPreview.daily,`dailyReports/${safeKey(x.member)}/${x.date}/daily-${Date.now()}.jpg`);
-        updates.dailyCallPicture=r.url;
-      }
-      if(dailyReportPreview.ptp){
-        const r=await storeImageWithFallback(dailyReportPreview.ptp,`dailyReports/${safeKey(x.member)}/${x.date}/ptp-${Date.now()}.jpg`);
-        updates.ptpCallPicture=r.url;
-      }
-      await reportRef(x.member,x.date).update(updates);
-      const verify=(await reportRef(x.member,x.date).once('value')).val()||{};
-      if(updates.dailyCallPicture && !verify.dailyCallPicture) throw new Error('Daily picture was not saved.');
-      if(updates.ptpCallPicture && !verify.ptpCallPicture) throw new Error('PTP picture was not saved.');
-      alert('Pictures saved successfully.');
-      await loadDailyReportEditor();
-      await renderDailyReportTable();
-      const a=document.getElementById('dailyCallPictureInput'),b=document.getElementById('ptpCallPictureInput');
-      if(a)a.value=''; if(b)b.value='';
-    } catch(e) {
-      console.error('Picture save error:',e);
-      alert('Picture upload failed. Please check internet/database permission and try again.');
-    }
+    const x=selected(); if(!x.member||!x.date){alert('Please select date and member.');return;}
+    const updates={updatedAt:Date.now()}; if(dailyReportPreview.daily) updates.dailyCallPicture=dailyReportPreview.daily; if(dailyReportPreview.ptp) updates.ptpCallPicture=dailyReportPreview.ptp;
+    if(!updates.dailyCallPicture && !updates.ptpCallPicture){alert('Please upload at least one picture.');return;}
+    await reportRef(x.member,x.date).update(updates); alert('Pictures saved.'); renderDailyReportTable();
   };
   
 window.showDailyReportPicture=function(src,label){
@@ -10770,9 +10315,7 @@ window.deleteDailyReportPicture=function(type){ const x=selected(); if(!x.member
         if(d.column.index===5) dataRowIndex++;
       }
     },columnStyles:{0:{cellWidth:22},1:{cellWidth:48},2:{cellWidth:28},3:{cellWidth:20},4:{cellWidth:35},5:{cellWidth:35}}});
-    const pdfBlob=doc.output('blob');
-    const downloaded=await downloadBlobFile(pdfBlob, 'daily-report-'+(selectedDate||todayISO())+'.pdf');
-    if(!downloaded) throw new Error('PDF download handler returned false.');
+    doc.save('daily-report-'+(selectedDate||todayISO())+'.pdf');
   };
   // Refresh editor/table when date/member/hour changes.
   document.addEventListener('change',function(e){
